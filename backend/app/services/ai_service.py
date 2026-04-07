@@ -3,7 +3,6 @@ import os
 import re
 import shutil
 from collections import Counter
-
 import numpy as np
 import soundfile as sf
 from scipy import signal
@@ -186,7 +185,6 @@ class AIService:
         cleaned = re.sub(r",\s*,", ", ", cleaned)
         cleaned = re.sub(r"\b(and|but|or|so)\s*,", r"\1", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"\b(and|but|or|so)\s+,", r"\1", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s+", " ", cleaned)
         cleaned = re.sub(r"\s+([,.;:!?])", r"\1", cleaned)
         cleaned = re.sub(r"([,.;:!?]){2,}", r"\1", cleaned)
         cleaned = cleaned.strip(" ,.;:-")
