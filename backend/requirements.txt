@@ -1,5 +1,23 @@
+# Core Framework
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
-python-multipart>=0.0.6
+
+# Data Validation
 pydantic>=2.8.0
 pydantic-settings>=2.5.0
+
+# File Handling
+python-multipart>=0.0.6
+
+# AI/ML Services
+openai>=1.0.0
+transformers>=4.45.0
+torch>=2.3.0
+soundfile>=0.13.0
+scipy>=1.13.0
+
+# Database (SQLAlchemy for future use)
+sqlalchemy>=2.0.0
+
+# Utilities
+python-dotenv>=1.0.0

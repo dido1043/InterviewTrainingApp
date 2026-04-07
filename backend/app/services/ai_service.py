@@ -1,71 +1,228 @@
-import openai
+import math
 import os
+import re
+import shutil
+from collections import Counter
+
+import numpy as np
+import soundfile as sf
+from scipy import signal
 from transformers import pipeline
+
 from models.InterviewAnalysis import InterviewAnalysis
 
+
+class AudioProcessingError(RuntimeError):
+    """Raised when uploaded audio cannot be decoded for transcription."""
+
+
 class AIService:
-    def __init__(self, api_key: str = None):
-        print("Loading Hugging Face models...")
-        
-        self.transcriber = pipeline(
-            "automatic-speech-recognition",
-            model="openai/whisper-small"
-        )
-        
-        self.analyzer = pipeline(
-            "text-generation",
-            model="mistralai/Mistral-7B-Instruct-v0.1"
-        )
-        
+    def __init__(self, api_key: str = None, transcriber=None, analyzer=None):
+        self.api_key = api_key
+        self._transcriber = transcriber
+        self._analyzer = analyzer
+        self._filler_patterns = [
+            "um",
+            "uh",
+            "like",
+            "you know",
+            "i mean",
+            "basically",
+            "actually",
+            "literally",
+            "sort of",
+            "kind of",
+            "so",
+            "well",
+            "right",
+        ]
+
+    @property
+    def transcriber(self):
+        if self._transcriber is None:
+            print("Loading Hugging Face transcription model...")
+            self._transcriber = pipeline(
+                "automatic-speech-recognition",
+                model="openai/whisper-small",
+            )
+        return self._transcriber
+
+    @property
+    def analyzer(self):
+        return self._analyzer
+
+    def _resample_audio(self, audio: np.ndarray, sampling_rate: int, target_rate: int) -> np.ndarray:
+        if sampling_rate == target_rate:
+            return np.ascontiguousarray(audio, dtype=np.float32)
+
+        divisor = math.gcd(sampling_rate, target_rate)
+        resampled = signal.resample_poly(audio, target_rate // divisor, sampling_rate // divisor)
+        return np.ascontiguousarray(resampled, dtype=np.float32)
+
+    def _load_audio_with_soundfile(self, audio_path: str) -> dict:
+        try:
+            audio, sampling_rate = sf.read(audio_path, dtype="float32", always_2d=False)
+        except Exception as exc:
+            raise AudioProcessingError(
+                "This audio format needs an external decoder. Install ffmpeg "
+                "(`brew install ffmpeg`) or upload a WAV file."
+            ) from exc
+
+        if audio.size == 0:
+            raise ValueError("Uploaded audio file is empty")
+
+        if audio.ndim > 1:
+            audio = audio.mean(axis=1)
+
+        target_rate = self.transcriber.feature_extractor.sampling_rate
+        audio = self._resample_audio(audio, sampling_rate, target_rate)
+
+        return {
+            "array": audio,
+            "sampling_rate": target_rate,
+        }
+
     def transcribe_audio(self, audio_path: str) -> str:
         try:
             if not os.path.exists(audio_path):
                 raise FileNotFoundError(f"Audio file not found: {audio_path}")
+
             print(f"Transcribing audio: {audio_path}")
-            result = self.transcriber(audio_path)
+
+            try:
+                audio_input = self._load_audio_with_soundfile(audio_path)
+            except AudioProcessingError:
+                if shutil.which("ffmpeg"):
+                    audio_input = audio_path
+                else:
+                    raise
+
+            result = self.transcriber(audio_input)
             transcript = result.get("text", "")
             if not transcript:
                 raise ValueError("Transcription returned empty result")
-            print(f"✓ Transcription successful: {len(transcript)} characters")
+
+            print(f"Transcription successful: {len(transcript)} characters")
             return transcript
-        except Exception as e:
-            print(f"Error during transcription: {e}")
-            raise Exception(f"Transcription failed: {str(e)}")
+        except AudioProcessingError as exc:
+            print(f"Audio decoding error: {exc}")
+            raise
+        except Exception as exc:
+            print(f"Error during transcription: {exc}")
+            raise AudioProcessingError(f"Transcription failed: {str(exc)}") from exc
+
+    def _count_fillers(self, text: str) -> Counter:
+        lowered = text.lower()
+        counts = Counter()
+
+        for filler in self._filler_patterns:
+            pattern = rf"(?<!\w){re.escape(filler)}(?!\w)"
+            matches = re.findall(pattern, lowered)
+            if matches:
+                counts[filler] = len(matches)
+
+        return counts
+
+    def _score_transcript(self, word_count: int, filler_total: int, sentence_count: int) -> int:
+        score = 82
+
+        if word_count < 40:
+            score -= 14
+        elif word_count < 80:
+            score -= 7
+        elif word_count > 260:
+            score -= 4
+
+        if sentence_count <= 1:
+            score -= 8
+
+        filler_ratio = filler_total / max(word_count, 1)
+        if filler_ratio > 0.12:
+            score -= 28
+        elif filler_ratio > 0.08:
+            score -= 18
+        elif filler_ratio > 0.04:
+            score -= 10
+        elif filler_total == 0:
+            score += 6
+
+        return max(0, min(100, score))
+
+    def _build_critique(self, text: str, filler_counts: Counter, score: int) -> str:
+        word_count = len(re.findall(r"\b[\w']+\b", text))
+        top_fillers = [word for word, _count in filler_counts.most_common(3)]
+
+        if word_count < 40:
+            opening = "The response is very short, so it does not yet give enough proof of impact, structure, or confidence."
+        elif score >= 80:
+            opening = "The response is fairly clear and direct, with a solid base to build on."
+        elif score >= 65:
+            opening = "The response communicates the main idea, but it would land better with tighter structure and cleaner delivery."
+        else:
+            opening = "The response currently feels hesitant and under-structured, which makes the main message less persuasive."
+
+        if top_fillers:
+            filler_line = (
+                f"Filler language such as {', '.join(top_fillers)} weakens confidence and makes key points less crisp."
+            )
+        else:
+            filler_line = "Filler language is well controlled, which helps the answer sound more confident."
+
+        closing = (
+            "Aim for a simple flow: situation, action, measurable result, and why it matters. "
+            "Shorter sentences and concrete outcomes will make the pitch stronger."
+        )
+
+        return " ".join([opening, filler_line, closing])
+
+    def _build_improved_script(self, text: str) -> str:
+        cleaned = text
+
+        for filler in sorted(self._filler_patterns, key=len, reverse=True):
+            pattern = rf"(?<!\w){re.escape(filler)}(?!\w)"
+            cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
+
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        cleaned = re.sub(r",\s*,", ", ", cleaned)
+        cleaned = re.sub(r"\b(and|but|or|so)\s*,", r"\1", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\b(and|but|or|so)\s+,", r"\1", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        cleaned = re.sub(r"\s+([,.;:!?])", r"\1", cleaned)
+        cleaned = re.sub(r"([,.;:!?]){2,}", r"\1", cleaned)
+        cleaned = cleaned.strip(" ,.;:-")
+
+        if not cleaned:
+            cleaned = text.strip()
+
+        if cleaned and cleaned[-1] not in ".!?":
+            cleaned += "."
+
+        return cleaned
+
     def analyze_text(self, text: str) -> InterviewAnalysis:
-        """Analyze interview using free Mistral model"""
         if not text or len(text.strip()) == 0:
             raise ValueError("Text for analysis is empty")
+
         try:
             print("Analyzing interview...")
-            prompt = f"""You are a sales coach. Analyze this interview and return ONLY valid JSON with these fields:
-- strengths: list of 3-5 key strengths
-- weaknesses: list of 3-5 areas to improve
-- overall_score: integer from 0-100
-- recommendations: list of 3-5 actionable recommendations
+            filler_counts = self._count_fillers(text)
+            filler_words = [word for word, count in filler_counts.most_common() if count > 0]
+            word_count = len(re.findall(r"\b[\w']+\b", text))
+            sentence_count = max(1, len(re.findall(r"[.!?]+", text)))
+            score = self._score_transcript(word_count, sum(filler_counts.values()), sentence_count)
 
-Interview: {text}
+            if self.analyzer is not None:
+                print("Using injected analyzer backend...")
+                response = self.analyzer(text)
+                if isinstance(response, InterviewAnalysis):
+                    return response
 
-Return ONLY JSON, no other text:"""
-            
-            response = self.analyzer(
-                prompt,
-                max_length=800,
-                temperature=0.7,
-                do_sample=True
+            return InterviewAnalysis(
+                score=score,
+                filler_words=filler_words,
+                critique=self._build_critique(text, filler_counts, score),
+                improved_script=self._build_improved_script(text),
             )
-            
-            # Extract JSON from response
-            generated_text = response[0]["generated_text"]
-            # Find JSON in the response
-            json_start = generated_text.find('{')
-            json_end = generated_text.rfind('}') + 1
-            
-            if json_start == -1 or json_end <= json_start:
-                raise ValueError("No valid JSON found in response")
-            
-            json_text = generated_text[json_start:json_end]
-            return InterviewAnalysis.model_validate_json(json_text)
-        except Exception as e:
-            print(f"Error during analysis: {e}")
+        except Exception as exc:
+            print(f"Error during analysis: {exc}")
             raise
-    
