@@ -8,7 +8,7 @@ import soundfile as sf
 from scipy import signal
 from transformers import pipeline
 
-from models.InterviewAnalysis import InterviewAnalysis
+from app.models.InterviewAnalysis import InterviewAnalysis
 
 
 class AudioProcessingError(RuntimeError):

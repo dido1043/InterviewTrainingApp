@@ -6,9 +6,9 @@ from tempfile import NamedTemporaryFile
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from models.AnalysisResponse import AnalysisResponse
-from services.ai_service import AIService
-from services.ai_service import AudioProcessingError
+from app.models.AnalysisResponse import AnalysisResponse
+from app.services.ai_service import AIService
+from app.services.ai_service import AudioProcessingError
 
 router = APIRouter()
 
@@ -16,6 +16,10 @@ router = APIRouter()
 @lru_cache(maxsize=1)
 def get_ai_service():
     return AIService(api_key=os.getenv("OPENAI_API_KEY"))
+
+@router.get("/health")
+async def health_check():
+    return {"status": "ok"}
 
 @router.post("/analyze", response_model=AnalysisResponse)
 async def analyze_pitch(file: UploadFile = File(...), ai_service: AIService = Depends(get_ai_service)):
