@@ -174,7 +174,7 @@ class AIService:
 
         return " ".join([opening, filler_line, closing])
 
-    def _build_improved_script(self, text: str) -> str:
+    def _clean_script_text(self, text: str) -> str:
         cleaned = text
 
         for filler in sorted(self._filler_patterns, key=len, reverse=True):
@@ -191,6 +191,115 @@ class AIService:
 
         if not cleaned:
             cleaned = text.strip()
+
+        return cleaned
+
+    def _looks_like_bulgarian(self, text: str) -> bool:
+        if re.search(r"[А-Яа-яЁёЍѝ]", text):
+            return True
+
+        lowered = text.lower()
+        transliterated_markers = [
+            "zdravei",
+            "az",
+            "sum",
+            "intervyu",
+            "poziciya",
+            "razrabotchik",
+        ]
+        return sum(marker in lowered for marker in transliterated_markers) >= 2
+
+    def _extract_candidate_name(self, text: str) -> str | None:
+        patterns = [
+            r"\bаз съм\s+([A-ZА-Я][A-Za-zА-Яа-я-]+)",
+            r"\bаз\s+([A-ZА-Я][A-Za-zА-Яа-я-]+)",
+            r"\bя\s+([A-ZА-Я][A-Za-zА-Яа-я-]+)",
+            r"\bказвам се\s+([A-ZА-Я][A-Za-zА-Яа-я-]+)",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match:
+                name = match.group(1).strip()
+                return f"{name[:1].upper()}{name[1:]}"
+
+        return None
+
+    def _extract_candidate_role(self, text: str) -> str | None:
+        lowered = text.lower()
+
+        if any(token in lowered for token in ["java", "джава", "джаво"]):
+            return "Java разработчик"
+        if any(token in lowered for token in ["python", "пайтън"]):
+            return "Python разработчик"
+        if any(token in lowered for token in ["frontend", "front-end", "фронтенд"]):
+            return "Frontend разработчик"
+        if any(token in lowered for token in ["backend", "back-end", "бекенд"]):
+            return "Backend разработчик"
+        if any(token in lowered for token in ["fullstack", "full-stack", "фулстак"]):
+            return "Full-stack разработчик"
+        if any(token in lowered for token in ["developer", "разработчик", "девелопър"]):
+            return "разработчик"
+
+        return None
+
+    def _normalize_bulgarian_script(self, text: str) -> str:
+        normalized = text
+        replacements = [
+            (r"\bя\b", "аз"),
+            (r"\bйа\b", "аз"),
+            (r"\bi\b", "аз"),
+            (r"\bмето\b", "моето"),
+            (r"\bинтервью\b", "интервю"),
+            (r"\bджаво\b", "Java"),
+            (r"\bджава\b", "Java"),
+            (r"\bjava developer\b", "Java разработчик"),
+            (r"\bдевелоп[еъ]р\b", "разработчик"),
+        ]
+
+        for pattern, replacement in replacements:
+            normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
+
+        normalized = re.sub(r"\s+", " ", normalized)
+        normalized = re.sub(r"\s+([,.;:!?])", r"\1", normalized)
+        normalized = re.sub(r"([,.;:!?]){2,}", r"\1", normalized)
+        normalized = normalized.strip(" ,.;:-")
+
+        if normalized:
+            normalized = f"{normalized[:1].upper()}{normalized[1:]}"
+
+        return normalized
+
+    def _build_bulgarian_improved_script(self, text: str) -> str:
+        normalized = self._normalize_bulgarian_script(self._clean_script_text(text))
+        word_count = len(re.findall(r"\b[\w']+\b", normalized))
+        name = self._extract_candidate_name(normalized)
+        role = self._extract_candidate_role(normalized)
+        has_intro_shape = any(token in normalized.lower() for token in ["здравей", "аз ", "кандидат", "интервю"])
+
+        if word_count <= 45 and (has_intro_shape or name or role):
+            intro_lines = []
+
+            if name:
+                intro_lines.append(f"Здравейте! Аз съм {name}.")
+            else:
+                intro_lines.append("Здравейте!")
+
+            if role:
+                intro_lines.append(f"Кандидатствам за позиция {role}.")
+
+            intro_lines.append(
+                "Ще се радвам накратко да представя своя опит, умения и мотивация."
+            )
+            return " ".join(intro_lines)
+
+        return normalized
+
+    def _build_improved_script(self, text: str) -> str:
+        if self._looks_like_bulgarian(text):
+            cleaned = self._build_bulgarian_improved_script(text)
+        else:
+            cleaned = self._clean_script_text(text)
 
         if cleaned and cleaned[-1] not in ".!?":
             cleaned += "."
