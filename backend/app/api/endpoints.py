@@ -12,7 +12,6 @@ from app.services.ai_service import AudioProcessingError
 
 router = APIRouter()
 
-# Dependency Injection (like @Autowired)
 @lru_cache(maxsize=1)
 def get_ai_service():
     return AIService(api_key=os.getenv("OPENAI_API_KEY"))
