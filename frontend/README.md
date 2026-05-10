@@ -13,6 +13,7 @@ This Expo React Native app uploads an interview answer recording to the FastAPI 
 
 1. Start the backend from `/Users/deyandudunovski/Documents/InterviewTrainingApp/backend`.
 2. Install dependencies with `npm install`.
+	If npm reports peer-dependency resolution errors in CI or on a fresh machine, use `npm install --legacy-peer-deps`.
 3. Start the mobile app with `npm run start`.
 
 ## Backend connection
