@@ -1,3 +1,6 @@
 declare const process: {
-  env: Record<string, string | undefined>;
+  env: {
+    EXPO_PUBLIC_BACKEND_URL?: string;
+    [key: string]: string | undefined;
+  };
 };

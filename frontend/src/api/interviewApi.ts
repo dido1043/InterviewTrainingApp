@@ -2,7 +2,7 @@ import { NativeModules, Platform } from "react-native";
 
 import type { AnalysisResponse, InterviewAnalysis, SelectedAudio } from "../types/analysis";
 
-const envApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim() ?? "";
+const envApiBaseUrl = process.env.EXPO_PUBLIC_BACKEND_URL?.trim() ?? "";
 
 const mimeTypeMap: Record<string, string> = {
   aac: "audio/aac",
@@ -51,11 +51,9 @@ function resolveApiBaseUrl(): string {
     return `http://${bundleHost}:8000`;
   }
 
-  if (Platform.OS === "android") {
-    return "http://10.0.2.2:8000";
-  }
-
-  return "http://127.0.0.1:8000";
+  throw new Error(
+    "EXPO_PUBLIC_BACKEND_URL is not set. Add it to your .env file (e.g. EXPO_PUBLIC_BACKEND_URL=http://localhost:8000)."
+  );
 }
 
 export const defaultApiBaseUrl = resolveApiBaseUrl();
