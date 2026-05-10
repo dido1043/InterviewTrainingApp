@@ -13,9 +13,6 @@ from app.services.ai_service import AIService, AudioProcessingError
 from app.models.InterviewAnalysis import InterviewAnalysis
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _make_wav(path: str, duration_s: float = 0.5, sample_rate: int = 16000) -> None:
     """Write a minimal valid mono WAV file."""
@@ -28,9 +25,6 @@ def _make_wav(path: str, duration_s: float = 0.5, sample_rate: int = 16000) -> N
         wf.writeframes(struct.pack(f"<{n_samples}h", *samples))
 
 
-# ---------------------------------------------------------------------------
-# _count_fillers
-# ---------------------------------------------------------------------------
 
 class TestCountFillers:
     def test_single_filler(self, ai_service):
@@ -62,9 +56,7 @@ class TestCountFillers:
         assert len(counts) == 0
 
 
-# ---------------------------------------------------------------------------
-# _score_transcript
-# ---------------------------------------------------------------------------
+
 
 class TestScoreTranscript:
     def test_baseline(self, ai_service):
@@ -104,9 +96,7 @@ class TestScoreTranscript:
         assert score == 84  # 82 -4 +6
 
 
-# ---------------------------------------------------------------------------
-# _build_critique
-# ---------------------------------------------------------------------------
+
 
 class TestBuildCritique:
     def test_short_response_opening(self, ai_service):
@@ -140,9 +130,7 @@ class TestBuildCritique:
         assert "well controlled" in critique.lower()
 
 
-# ---------------------------------------------------------------------------
-# _clean_script_text
-# ---------------------------------------------------------------------------
+
 
 class TestCleanScriptText:
     def test_removes_fillers(self, ai_service):
@@ -168,9 +156,6 @@ class TestCleanScriptText:
         assert ",," not in cleaned
 
 
-# ---------------------------------------------------------------------------
-# _looks_like_bulgarian
-# ---------------------------------------------------------------------------
 
 class TestLooksLikeBulgarian:
     def test_cyrillic_detected(self, ai_service):
@@ -186,9 +171,7 @@ class TestLooksLikeBulgarian:
         assert ai_service._looks_like_bulgarian("zdravei everyone") is False
 
 
-# ---------------------------------------------------------------------------
-# _extract_candidate_name
-# ---------------------------------------------------------------------------
+
 
 class TestExtractCandidateName:
     def test_az_sum_pattern(self, ai_service):
@@ -205,9 +188,7 @@ class TestExtractCandidateName:
         assert result is None or result[0].isupper()
 
 
-# ---------------------------------------------------------------------------
-# _extract_candidate_role
-# ---------------------------------------------------------------------------
+
 
 class TestExtractCandidateRole:
     def test_java(self, ai_service):
@@ -232,9 +213,7 @@ class TestExtractCandidateRole:
         assert ai_service._extract_candidate_role("I love music") is None
 
 
-# ---------------------------------------------------------------------------
-# _normalize_bulgarian_script
-# ---------------------------------------------------------------------------
+
 
 class TestNormalizeBulgarianScript:
     def test_ya_replaced_with_az(self, ai_service):
@@ -254,9 +233,7 @@ class TestNormalizeBulgarianScript:
         assert result == ""
 
 
-# ---------------------------------------------------------------------------
-# _build_improved_script
-# ---------------------------------------------------------------------------
+
 
 class TestBuildImprovedScript:
     def test_ends_with_period(self, ai_service):
@@ -272,9 +249,6 @@ class TestBuildImprovedScript:
         assert result
 
 
-# ---------------------------------------------------------------------------
-# analyze_text
-# ---------------------------------------------------------------------------
 
 class TestAnalyzeText:
     def test_empty_text_raises(self, ai_service):
@@ -314,9 +288,6 @@ class TestAnalyzeText:
         assert isinstance(result.improved_script, str) and len(result.improved_script) > 0
 
 
-# ---------------------------------------------------------------------------
-# transcribe_audio
-# ---------------------------------------------------------------------------
 
 class TestTranscribeAudio:
     def test_missing_file_raises(self, ai_service):
