@@ -19,6 +19,8 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    env:
+      PYTHONPATH: ${{ github.workspace }}/backend
 
     steps:
     - uses: actions/checkout@v4
@@ -39,4 +41,4 @@ jobs:
         flake8 app tests --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
-        pytest
+        python -m pytest -q
