@@ -4,9 +4,6 @@ import re
 import shutil
 from collections import Counter
 import numpy as np
-import soundfile as sf
-from scipy import signal
-from transformers import pipeline
 
 from app.models.InterviewAnalysis import InterviewAnalysis
 
@@ -40,6 +37,11 @@ class AIService:
     def transcriber(self):
         if self._transcriber is None:
             print("Loading Hugging Face transcription model...")
+            try:
+                from transformers import pipeline
+            except Exception as exc:
+                raise RuntimeError("transformers is required for transcription") from exc
+
             self._transcriber = pipeline(
                 "automatic-speech-recognition",
                 model="openai/whisper-small",
@@ -54,12 +56,22 @@ class AIService:
         if sampling_rate == target_rate:
             return np.ascontiguousarray(audio, dtype=np.float32)
 
+        try:
+            from scipy import signal
+        except Exception:
+            raise AudioProcessingError("Resampling requires scipy")
+
         divisor = math.gcd(sampling_rate, target_rate)
         resampled = signal.resample_poly(audio, target_rate // divisor, sampling_rate // divisor)
         return np.ascontiguousarray(resampled, dtype=np.float32)
 
     def _load_audio_with_soundfile(self, audio_path: str) -> dict:
         try:
+            try:
+                import soundfile as sf
+            except Exception as exc:
+                raise AudioProcessingError("soundfile is required to load audio files") from exc
+
             audio, sampling_rate = sf.read(audio_path, dtype="float32", always_2d=False)
         except Exception as exc:
             raise AudioProcessingError(
