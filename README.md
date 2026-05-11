@@ -1,1 +1,1 @@
-Depoyed API: https://interviewtrainingapp.onrender.com
+Depoyed API: https://interviewtrainingapp.onrender.com/docs
